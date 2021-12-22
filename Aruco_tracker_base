@@ -1,0 +1,114 @@
+import cv2
+import cv2.aruco as aruco
+import numpy as np
+import os
+
+def loadAugImages(path):
+    myList = os.listdir(path)
+    noOfMarkers = len(myList)
+
+    augDics = {}
+    for imgPath in myList:
+        key = int(os.path.splitext(imgPath)[0])
+        imgAug = cv2.imread(f'{path}/{imgPath}.jfif')
+        augDics[key] = imgAug
+    return augDics
+
+
+'''
+these parameters are the generator parameters used to generate the aruco's in the first place
+    6 is from the "6x6" in the dictionary call
+        the size of the marker
+    250 is from the 250 in the dictionary call
+        the number of possible markers of this type
+'''
+
+def findArucoMarkers(img, markerSize = 6, totalMarkers = 250, draw = True):
+    '''
+    The goal of this is to actually find the markers in an image.
+        -first convert to grayscale
+        -call the specific dictionary of markers to search against from the aruco package
+            -use the format shown below in the "key=" line, very good way of reformatting based off of
+             parameters
+        -create the search parameters (leave as default for most purposes)
+        -detect the markers in the image
+            -bboxs: the boundary box for the marker (the four corners)
+            -id: the id of the detected marker
+            -rejected: things that it thinks might be an aruco but didn't make the cut
+        -draw the detected markers if requested using a method from the aruco package
+        -return the bounding boxes and id's detected
+
+    :param img: image directly from the camera feed
+    :param markerSize: used to identify type of aruco marker (number of boxes for w/height)
+    :param totalMarkers: number of possible combinations with this layout
+    :param draw: flag to show whether or not to render out the rectangle around the feducial
+
+    :return: the boundary boxes for the marker found and the ids of the markers found
+    '''
+
+    imgGray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+    key = getattr(aruco, f'DICT_{markerSize}X{markerSize}_{totalMarkers}')
+    arucoDict = aruco.Dictionary_get(key)
+    arucoParam = aruco.DetectorParameters_create()
+
+    bboxs, ids, rejected = aruco.detectMarkers(imgGray, arucoDict, parameters=arucoParam)
+
+    if draw:
+        aruco.drawDetectedMarkers(img, bboxs)
+    return [bboxs, ids]
+
+def augmentAruco(bbox, id, img, imgAug, drawId = True):
+    '''
+    Goal is to display one image on top of a detected aruco marker
+
+    :param bbox: the four corners of the box
+    :param id: the marker's id
+    :param img: the final image in which to draw
+    :param imgAug: the image to overlap the marker
+    :param drawId: parameter to determine if the image should be overlaid
+
+    :return: the overlapped images
+    '''
+
+    tl = bbox[0][0][0], bbox[0][0][1]
+    tr = bbox[0][1][0], bbox[0][1][1]
+    br = bbox[0][2][0], bbox[0][2][1]
+    bl = bbox[0][3][0], bbox[0][3][1]
+
+    #height, width, channel
+    h, w, c = imgAug.shape
+
+    pts1 = np.array([tl, tr, br, bl])
+    pts2 = np.float32([[0,0], [w,0], [w,h],[0,h]])
+    matrix, _ = cv2.findHomography(pts2, pts1)
+    imgOut = cv2.warpPerspective(imgAug, matrix, (img.shape[1], img.shape[0]))
+    cv2.fillConvexPoly(img, pts1.astype(int), (0,0,0))
+    imgOut = img + imgOut
+
+    if drawId:
+        cv2.putText(imgOut, str(id), [int(tl[0]), int(tl[1])], cv2.FONT_HERSHEY_PLAIN, 2,
+                    (255,0,255),2)
+
+    return imgOut
+
+
+
+def main():
+    cap = cv2.VideoCapture(0)
+    imgAug = cv2.imread("C:\\Users\\bgonzalez\\OneDrive - Mustang Plumbing\\Desktop\\python_projects\\images_w_arucos\\dog_picture.jpg")
+    #augDics = loadAugImages("Images")
+    while True:
+        success, img = cap.read()
+        arucoFound = findArucoMarkers(img)
+
+        #loop through all the markers and augment each one
+        if len(arucoFound[0])!=0:
+            for bbox, id in zip(arucoFound[0], arucoFound[1]):
+               img = augmentAruco(bbox, id, img, imgAug)
+
+        cv2.imshow("Image",img)
+        cv2.waitKey(1)
+
+if __name__ == "__main__":
+    main()

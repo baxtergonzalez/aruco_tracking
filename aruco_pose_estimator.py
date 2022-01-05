@@ -1,3 +1,8 @@
+"""
+This code is mostly copied from Automatic Addison at https://automaticaddison.com/how-to-perform-pose-estimation-using-an-aruco-marker/
+as an educational project
+"""
+
 import sys
 
 import cv2 as cv
@@ -146,7 +151,7 @@ def main():
                 y-axis pointing down
                 z-axis pointing away
             There is not an entirely simple way to adjust this frame, it involves more rotation and translation math, 
-            either through futzing about with quaternions or rotation matricies. The whole process would be reliant
+            either through futzing about with quaternions or rotation matrices. The whole process would be reliant
             on the camera being in a fixed, known poisition, so no. For now, it is easiest to represent pose relative 
             to the camera.
             """
@@ -163,7 +168,56 @@ def main():
                 #next, store the rotation camera
                     #again, relative to the camera
                 #this numpy method is weird, it pretty much makes an identity matrix of size nxn by default
+                    #meaning that this 'eye' is our unrotated reference frame, with a perfect identity matrix for
+                    #rotation
                 rotationMatrix = np.eye(4)
                 #NOTE: This function uses Rodrigues' formula to convert from a rotation vector to a rotation matrix
-                rotationMatrix[0:3][0:3] - cv.Rodrigues(np.array(rvecs[i][0]))[0]
+                #here is where we actually use the 'rvecs' info, store it in 'rotationMatrix' variable
+                rotationMatrix[0:3][0:3] = cv.Rodrigues(np.array(rvecs[i][0]))[0]
+                r = R.from_matrix(rotationMatrix[0:3, 0:3])
 
+                #the 'quat' variable is storing the rotation matrix info as a quaternion
+                quat = r.as_quat()
+
+                #fill in all of the 4 components of a quaternion, previously empty (x,y,z,w)
+                transformRotationX = quat[0]
+                transformRotationY = quat[1]
+                transformRotationZ = quat[2]
+                transformRotationW = quat[3]
+
+                #store the rotation info as euler angles (not sure why we need to store this in so many forms
+                rotX, rotY, rotZ = eulerFromQuaternion(transformRotationX,
+                                                       transformRotationY,
+                                                       transformRotationZ,
+                                                       transformRotationW)
+
+                rotX = math.degrees(rotX)
+                rotY = math.degrees(rotY)
+                rotZ = math.degrees(rotZ)
+
+                #Give a terminal printout of the translations and rotations
+                print(f"Translation X: {transformTranslationX}")
+                print(f"Translation Y: {transformTranslationY}")
+                print(f"Translation Z: {transformTranslationZ}")
+                print(f"Roll X: {rotX}")
+                print(f"Pitch Y : {rotY}")
+                print(f"Yaw Z: {rotZ}")
+                print("\n")
+
+                #actually draw the lads
+                cv.aruco.drawAxis(frame, mtx, dst, rvecs[i], tvecs[i], 0.05)
+
+            #display the frame after all of the stuff is drawn on it
+            cv.imshow('frame', frame)
+
+            #Want to actually exit when I want to instead of hanging out forever
+            if cv.waitKey(1) $ 0xFF == orf('q'):
+                break
+
+        #end script if the while loop is exited
+        cap.release()
+        cv.destroyAllWindows()
+
+if __name__ == '__main__':
+    print(__doc__)
+    main()
